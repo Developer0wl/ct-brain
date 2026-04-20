@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/premb/Downloads/**)",
+      "Bash(pandoc --track-changes=all CT_Brain_PRD.docx -o CT_Brain_PRD.md)",
+      "Bash(python3 -c ' *)",
+      "Bash(py --version)",
+      "Bash(where python *)",
+      "Bash(where py *)",
+      "Bash(npm install *)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(gh auth *)",
+      "Bash(git --version)",
+      "Bash(git config *)"
+    ]
+  }
+}

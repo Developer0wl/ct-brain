@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Environment variables — NEVER commit these
+.env
+.env.local
+.env.*.local
+
+# Build output
+client/dist/
+server/dist/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Vite
+client/.vite/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+scripts/__pycache__/
+.venv/
+venv/
+
+# Editor
+.vscode/
+.idea/
+*.swp
