@@ -14,10 +14,10 @@ CREATE TABLE knowledge_chunks (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Index for fast cosine similarity search
+-- Index for fast cosine similarity search (hnsw supports >2000 dims, ivfflat does not)
 CREATE INDEX ON knowledge_chunks
-  USING ivfflat (embedding vector_cosine_ops)
-  WITH (lists = 100);
+  USING hnsw (embedding vector_cosine_ops)
+  WITH (m = 16, ef_construction = 64);
 
 -- Source documents table: tracks uploaded files
 CREATE TABLE knowledge_sources (
