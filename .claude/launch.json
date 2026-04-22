@@ -9,8 +9,8 @@
     },
     {
       "name": "C&T Brain — Backend (Express)",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "server"],
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["server/node_modules/tsx/dist/cli.mjs", "watch", "server/src/server.ts"],
       "port": 3001
     }
   ]

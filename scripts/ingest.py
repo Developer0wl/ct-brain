@@ -17,6 +17,10 @@ import time
 import uuid
 from pathlib import Path
 
+# Ensure UTF-8 output on Windows (avoids charmap codec errors)
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent.parent / '.env')
@@ -104,29 +108,29 @@ def embed_batch(texts: list[str]) -> list[list[float]]:
             embeddings.append(embed_single(text))
         if i + batch_size < len(texts):
             time.sleep(0.5)  # brief pause between batches
-        print(f'  → Embedded {min(i + batch_size, len(texts))}/{len(texts)} chunks…', end='\r')
+        print(f'  -> Embedded {min(i + batch_size, len(texts))}/{len(texts)} chunks...', end='\r')
     print()
     return embeddings
 
 
 def ingest_file(path: Path, dry_run: bool = False) -> None:
-    print(f'\n📄 Ingesting: {path.name}')
+    print(f'\n[FILE] Ingesting: {path.name}')
 
     text = extract_text(path)
     if not text.strip():
-        print(f'  ⚠️  No text found in {path.name}, skipping.')
+        print(f'  [SKIP] No text found in {path.name}, skipping.')
         return
 
     chunks = chunk_text(text)
-    print(f'  → {len(chunks)} chunks created')
+    print(f'  -> {len(chunks)} chunks created')
 
     if dry_run:
         for i, c in enumerate(chunks[:3]):
-            print(f'  [chunk {i+1}] {c[:120]}…')
-        print(f'  (dry run — not saving to Supabase)')
+            print(f'  [chunk {i+1}] {c[:120]}...')
+        print(f'  (dry run -- not saving to Supabase)')
         return
 
-    print(f'  → Embedding {len(chunks)} chunks via Gemini gemini-embedding-001…')
+    print(f'  -> Embedding {len(chunks)} chunks via Gemini gemini-embedding-001...')
     embeddings = embed_batch(chunks)
 
     source_id = str(uuid.uuid4())
@@ -147,7 +151,7 @@ def ingest_file(path: Path, dry_run: bool = False) -> None:
             'id': str(uuid.uuid4()),
             'source_name': path.name,
             'source_type': ext,
-            'title': f'{path.stem} — chunk {i + 1}',
+            'title': f'{path.stem} - chunk {i + 1}',
             'content': chunk,
             'embedding': embedding,
             'metadata': {'source_id': source_id},
@@ -159,7 +163,7 @@ def ingest_file(path: Path, dry_run: bool = False) -> None:
     for i in range(0, len(rows), batch_size):
         supabase.table('knowledge_chunks').insert(rows[i:i + batch_size]).execute()
 
-    print(f'  ✅ Saved {len(chunks)} chunks from {path.name}')
+    print(f'  [OK] Saved {len(chunks)} chunks from {path.name}')
 
 
 def main() -> None:
@@ -187,11 +191,11 @@ def main() -> None:
         if not files:
             print(f'No supported files found in {args.dir}')
             sys.exit(1)
-        print(f'Found {len(files)} files to ingest…')
+        print(f'Found {len(files)} files to ingest...')
         for f in sorted(files):
             ingest_file(f, dry_run=args.dry_run)
 
-    print('\n🎉 Ingestion complete.')
+    print('\nIngestion complete.')
 
 
 if __name__ == '__main__':
