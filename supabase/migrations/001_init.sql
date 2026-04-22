@@ -14,9 +14,9 @@ CREATE TABLE knowledge_chunks (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Index for fast cosine similarity search (hnsw supports >2000 dims, ivfflat does not)
+-- hnsw on halfvec cast: required for >2000 dims (plain vector hnsw is limited to 2000)
 CREATE INDEX ON knowledge_chunks
-  USING hnsw (embedding vector_cosine_ops)
+  USING hnsw ((embedding::halfvec(3072)) halfvec_cosine_ops)
   WITH (m = 16, ef_construction = 64);
 
 -- Source documents table: tracks uploaded files
@@ -110,9 +110,9 @@ LANGUAGE SQL STABLE AS $$
     kc.source_name,
     kc.source_type,
     kc.title,
-    1 - (kc.embedding <=> query_embedding) AS similarity
+    1 - (kc.embedding::halfvec(3072) <=> query_embedding::halfvec(3072)) AS similarity
   FROM knowledge_chunks kc
-  WHERE 1 - (kc.embedding <=> query_embedding) > match_threshold
-  ORDER BY kc.embedding <=> query_embedding
+  WHERE 1 - (kc.embedding::halfvec(3072) <=> query_embedding::halfvec(3072)) > match_threshold
+  ORDER BY kc.embedding::halfvec(3072) <=> query_embedding::halfvec(3072)
   LIMIT match_count;
 $$;
