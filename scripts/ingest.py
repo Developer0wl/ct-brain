@@ -7,12 +7,13 @@ Usage:
   python ingest.py --file path/to/doc.txt
   python ingest.py --dir path/to/folder/   # ingest all supported files in a directory
 
-Reads SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and OPENAI_API_KEY from .env
+Reads SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and GEMINI_API_KEY from .env
 """
 
 import argparse
 import os
 import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -20,19 +21,19 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent.parent / '.env')
 
-from openai import OpenAI
+import google.generativeai as genai
 from supabase import create_client
 
 SUPABASE_URL = os.environ['SUPABASE_URL']
 SUPABASE_KEY = os.environ['SUPABASE_SERVICE_ROLE_KEY']
-OPENAI_API_KEY = os.environ['OPENAI_API_KEY']
+GEMINI_API_KEY = os.environ['GEMINI_API_KEY']
 
-openai_client = OpenAI(api_key=OPENAI_API_KEY)
+genai.configure(api_key=GEMINI_API_KEY)
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 CHUNK_SIZE = 500   # words per chunk
 OVERLAP = 50       # words of overlap between chunks
-EMBED_MODEL = 'text-embedding-3-small'
+EMBED_MODEL = 'models/text-embedding-004'  # 768 dimensions
 SUPPORTED_EXTENSIONS = {'.pdf', '.docx', '.txt'}
 
 
@@ -76,7 +77,6 @@ def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = OVERLAP) 
             chunks.append(chunk.strip())
         i += chunk_size - overlap
         if i + chunk_size >= len(words) and i < len(words):
-            # Last partial chunk
             chunk = ' '.join(words[i:])
             if len(chunk.strip()) > 20:
                 chunks.append(chunk.strip())
@@ -84,15 +84,29 @@ def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = OVERLAP) 
     return chunks
 
 
+def embed_single(text: str) -> list[float]:
+    """Embed a single text chunk using Gemini text-embedding-004."""
+    result = genai.embed_content(
+        model=EMBED_MODEL,
+        content=text[:8000],
+        task_type='retrieval_document',
+    )
+    return result['embedding']
+
+
 def embed_batch(texts: list[str]) -> list[list[float]]:
-    # OpenAI embeddings API has a limit of 2048 inputs per call
-    batch_size = 100
-    all_embeddings = []
+    """Embed texts in small batches, respecting Gemini rate limits."""
+    embeddings = []
+    batch_size = 5  # conservative to avoid rate limits
     for i in range(0, len(texts), batch_size):
-        batch = [t[:8000] for t in texts[i:i + batch_size]]
-        response = openai_client.embeddings.create(model=EMBED_MODEL, input=batch)
-        all_embeddings.extend([d.embedding for d in response.data])
-    return all_embeddings
+        batch = texts[i:i + batch_size]
+        for text in batch:
+            embeddings.append(embed_single(text))
+        if i + batch_size < len(texts):
+            time.sleep(0.5)  # brief pause between batches
+        print(f'  → Embedded {min(i + batch_size, len(texts))}/{len(texts)} chunks…', end='\r')
+    print()
+    return embeddings
 
 
 def ingest_file(path: Path, dry_run: bool = False) -> None:
@@ -112,7 +126,7 @@ def ingest_file(path: Path, dry_run: bool = False) -> None:
         print(f'  (dry run — not saving to Supabase)')
         return
 
-    print(f'  → Embedding {len(chunks)} chunks…')
+    print(f'  → Embedding {len(chunks)} chunks via Gemini text-embedding-004…')
     embeddings = embed_batch(chunks)
 
     source_id = str(uuid.uuid4())

@@ -1,21 +1,35 @@
-import OpenAI from 'openai'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
+const embeddingModel = genAI.getGenerativeModel({ model: 'text-embedding-004' })
 
+// Gemini text-embedding-004 produces 768-dimensional vectors
 export async function embedText(text: string): Promise<number[]> {
-  const response = await openai.embeddings.create({
-    model: 'text-embedding-3-small',
-    input: text.slice(0, 8000), // stay within token limit
+  const result = await embeddingModel.embedContent({
+    content: { role: 'user', parts: [{ text: text.slice(0, 8000) }] },
+    taskType: 'RETRIEVAL_QUERY', // for querying at chat time
   })
-  return response.data[0].embedding
+  return result.embedding.values
+}
+
+export async function embedDocument(text: string): Promise<number[]> {
+  const result = await embeddingModel.embedContent({
+    content: { role: 'user', parts: [{ text: text.slice(0, 8000) }] },
+    taskType: 'RETRIEVAL_DOCUMENT', // for indexing documents
+  })
+  return result.embedding.values
 }
 
 export async function embedBatch(texts: string[]): Promise<number[][]> {
-  const response = await openai.embeddings.create({
-    model: 'text-embedding-3-small',
-    input: texts.map((t) => t.slice(0, 8000)),
-  })
-  return response.data.map((d) => d.embedding)
+  // Gemini doesn't have a batch endpoint — run in parallel with concurrency limit
+  const CONCURRENCY = 5
+  const results: number[][] = []
+  for (let i = 0; i < texts.length; i += CONCURRENCY) {
+    const batch = texts.slice(i, i + CONCURRENCY)
+    const embeddings = await Promise.all(batch.map((t) => embedDocument(t)))
+    results.push(...embeddings)
+  }
+  return results
 }
 
 // Split text into overlapping chunks suitable for embedding

@@ -1,7 +1,7 @@
 import { Router, Response } from 'express'
 import { requireAuth, AuthedRequest } from '../middleware/auth'
 import { retrieveRelevantChunks, buildContextBlock } from '../services/rag'
-import { streamChatResponse } from '../services/claude'
+import { streamChatResponse } from '../services/gemini'
 
 const router = Router()
 
