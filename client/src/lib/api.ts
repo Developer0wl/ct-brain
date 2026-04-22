@@ -19,13 +19,22 @@ export interface StreamChunk {
   text?: string
   sources?: Array<{ name: string; similarity: number }>
   message?: string
+  conversationId?: string
+  messageId?: string
+}
+
+export interface StreamDoneResult {
+  sources: Array<{ name: string; similarity: number }>
+  conversationId: string | null
+  messageId: string | null
 }
 
 export async function streamChat(
   messages: ChatMessage[],
   onChunk: (text: string) => void,
-  onDone: (sources: Array<{ name: string; similarity: number }>) => void,
-  onError: (msg: string) => void
+  onDone: (result: StreamDoneResult) => void,
+  onError: (msg: string) => void,
+  conversationId?: string | null
 ): Promise<void> {
   const authHeader = await getAuthHeader()
 
@@ -35,7 +44,7 @@ export async function streamChat(
       'Content-Type': 'application/json',
       Authorization: authHeader,
     },
-    body: JSON.stringify({ messages }),
+    body: JSON.stringify({ messages, conversationId: conversationId ?? undefined }),
   })
 
   if (!response.ok) {
@@ -63,13 +72,60 @@ export async function streamChat(
       try {
         const parsed: StreamChunk = JSON.parse(line.slice(6))
         if (parsed.type === 'chunk' && parsed.text) onChunk(parsed.text)
-        if (parsed.type === 'done') onDone(parsed.sources ?? [])
+        if (parsed.type === 'done') {
+          onDone({
+            sources: parsed.sources ?? [],
+            conversationId: parsed.conversationId ?? null,
+            messageId: parsed.messageId ?? null,
+          })
+        }
         if (parsed.type === 'error') onError(parsed.message ?? 'Error')
       } catch {
         // skip malformed SSE line
       }
     }
   }
+}
+
+export async function submitFeedback(
+  messageId: string,
+  rating: 'good' | 'bad',
+  comment?: string
+): Promise<{ feedbackId: string }> {
+  const authHeader = await getAuthHeader()
+  const res = await fetch(`${API_URL}/api/feedback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: authHeader },
+    body: JSON.stringify({ messageId, rating, comment }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Unknown error' }))
+    throw new Error(err.error ?? 'Failed to submit feedback')
+  }
+  return res.json()
+}
+
+export async function getFeedback(filter?: 'all' | 'good' | 'bad' | 'unpromoted') {
+  const authHeader = await getAuthHeader()
+  const params = filter && filter !== 'all' ? `?filter=${filter}` : ''
+  const res = await fetch(`${API_URL}/api/feedback${params}`, {
+    headers: { Authorization: authHeader },
+  })
+  if (!res.ok) throw new Error('Failed to fetch feedback')
+  return res.json()
+}
+
+export async function promoteFeedback(feedbackId: string) {
+  const authHeader = await getAuthHeader()
+  const res = await fetch(`${API_URL}/api/feedback/${feedbackId}/promote`, {
+    method: 'POST',
+    headers: { Authorization: authHeader },
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Unknown error' }))
+    throw new Error(err.error ?? 'Failed to promote feedback')
+  }
+  return res.json()
 }
 
 export async function getKnowledgeSources() {

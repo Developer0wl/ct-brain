@@ -7,20 +7,51 @@ import {
   uploadFile,
   deleteSource,
   deleteChunk,
+  getFeedback,
+  promoteFeedback,
 } from '../lib/api'
-import { ArrowLeft, Trash2, Upload, Plus, FileText, MessageSquare, RefreshCw } from 'lucide-react'
+import {
+  ArrowLeft,
+  Trash2,
+  Upload,
+  Plus,
+  FileText,
+  MessageSquare,
+  RefreshCw,
+  ThumbsUp,
+  ThumbsDown,
+  Star,
+  CheckCircle,
+} from 'lucide-react'
 
 interface Source { id: string; name: string; type: string; chunk_count: number; created_at: string }
 interface Chunk { id: string; source_name: string; source_type: string; title: string; content: string; created_at: string }
+interface FeedbackEntry {
+  id: string
+  rating: 'good' | 'bad'
+  comment?: string
+  promotedToKb: boolean
+  createdAt: string
+  userEmail: string
+  question: string
+  answer: string
+  sources: Array<{ name: string; similarity: number }>
+  messageId: string
+  conversationId: string
+}
 
-type Tab = 'sources' | 'chunks' | 'faq' | 'upload'
+type Tab = 'sources' | 'chunks' | 'faq' | 'upload' | 'feedback'
+type FeedbackFilter = 'all' | 'good' | 'bad' | 'unpromoted'
 
 export default function AdminPage() {
   const navigate = useNavigate()
   const [tab, setTab] = useState<Tab>('sources')
   const [sources, setSources] = useState<Source[]>([])
   const [chunks, setChunks] = useState<Chunk[]>([])
+  const [feedbackList, setFeedbackList] = useState<FeedbackEntry[]>([])
+  const [feedbackFilter, setFeedbackFilter] = useState<FeedbackFilter>('all')
   const [loading, setLoading] = useState(false)
+  const [promotingId, setPromotingId] = useState<string | null>(null)
   const [toast, setToast] = useState('')
 
   // FAQ form
@@ -34,7 +65,7 @@ export default function AdminPage() {
 
   function showToast(msg: string) {
     setToast(msg)
-    setTimeout(() => setToast(''), 3000)
+    setTimeout(() => setToast(''), 3500)
   }
 
   async function loadSources() {
@@ -49,10 +80,21 @@ export default function AdminPage() {
     setLoading(false)
   }
 
+  async function loadFeedback(filter: FeedbackFilter = feedbackFilter) {
+    setLoading(true)
+    try { setFeedbackList(await getFeedback(filter)) } catch { showToast('Failed to load feedback') }
+    setLoading(false)
+  }
+
   useEffect(() => {
     if (tab === 'sources') loadSources()
     if (tab === 'chunks') loadChunks()
+    if (tab === 'feedback') loadFeedback()
   }, [tab])
+
+  useEffect(() => {
+    if (tab === 'feedback') loadFeedback(feedbackFilter)
+  }, [feedbackFilter])
 
   async function handleDeleteSource(id: string, name: string) {
     if (!confirm(`Delete "${name}" and all its chunks?`)) return
@@ -102,11 +144,33 @@ export default function AdminPage() {
     if (fileRef.current) fileRef.current.value = ''
   }
 
+  async function handlePromote(feedbackId: string) {
+    setPromotingId(feedbackId)
+    try {
+      await promoteFeedback(feedbackId)
+      setFeedbackList((prev) =>
+        prev.map((f) => f.id === feedbackId ? { ...f, promotedToKb: true } : f)
+      )
+      showToast('Added to knowledge base! Future similar questions will use this answer.')
+    } catch (err) {
+      showToast((err as Error).message)
+    }
+    setPromotingId(null)
+  }
+
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'sources', label: 'Sources', icon: <FileText size={15} /> },
     { id: 'chunks', label: 'Chunks', icon: <MessageSquare size={15} /> },
     { id: 'faq', label: 'Add FAQ', icon: <Plus size={15} /> },
     { id: 'upload', label: 'Upload', icon: <Upload size={15} /> },
+    { id: 'feedback', label: 'Feedback', icon: <Star size={15} /> },
+  ]
+
+  const feedbackFilters: { id: FeedbackFilter; label: string }[] = [
+    { id: 'all', label: 'All' },
+    { id: 'good', label: '👍 Good' },
+    { id: 'bad', label: '👎 Bad' },
+    { id: 'unpromoted', label: 'Not yet promoted' },
   ]
 
   return (
@@ -126,7 +190,7 @@ export default function AdminPage() {
 
       <div className="mx-auto max-w-4xl px-6 py-8">
         {/* Tabs */}
-        <div className="flex gap-1 rounded-xl bg-white border border-gray-200 p-1 mb-6 w-fit">
+        <div className="flex gap-1 rounded-xl bg-white border border-gray-200 p-1 mb-6 flex-wrap">
           {tabs.map((t) => (
             <button
               key={t.id}
@@ -228,7 +292,7 @@ export default function AdminPage() {
                   value={faqA}
                   onChange={(e) => setFaqA(e.target.value)}
                   rows={6}
-                  placeholder="Write the answer as Kishor would explain it…"
+                  placeholder="Write the answer as Kishor would explain it..."
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition resize-none"
                 />
               </div>
@@ -237,7 +301,7 @@ export default function AdminPage() {
                 disabled={faqLoading || !faqQ.trim() || !faqA.trim()}
                 className="rounded-lg bg-primary px-6 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 transition"
               >
-                {faqLoading ? 'Adding…' : 'Add to Knowledge Base'}
+                {faqLoading ? 'Adding...' : 'Add to Knowledge Base'}
               </button>
             </form>
           </div>
@@ -270,15 +334,132 @@ export default function AdminPage() {
               onChange={handleUpload}
             />
             {uploadLoading && (
-              <p className="mt-3 text-sm text-primary animate-pulse">Ingesting document…</p>
+              <p className="mt-3 text-sm text-primary animate-pulse">Ingesting document...</p>
             )}
+          </div>
+        )}
+
+        {/* Feedback tab */}
+        {tab === 'feedback' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h2 className="font-semibold text-gray-800">
+                User Feedback
+                {feedbackList.length > 0 && (
+                  <span className="ml-2 text-sm font-normal text-gray-400">({feedbackList.length} entries)</span>
+                )}
+              </h2>
+              <button onClick={() => loadFeedback()} className="text-gray-400 hover:text-gray-600">
+                <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+              </button>
+            </div>
+
+            {/* Filter tabs */}
+            <div className="flex gap-1 rounded-lg bg-gray-100 p-1 w-fit">
+              {feedbackFilters.map((f) => (
+                <button
+                  key={f.id}
+                  onClick={() => setFeedbackFilter(f.id)}
+                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                    feedbackFilter === f.id
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Empty state */}
+            {feedbackList.length === 0 && !loading && (
+              <p className="rounded-lg border border-dashed border-gray-300 py-10 text-center text-sm text-gray-400">
+                {feedbackFilter === 'unpromoted'
+                  ? 'No good responses waiting for promotion yet.'
+                  : 'No feedback collected yet. Users can rate responses with thumbs up/down in the chat.'}
+              </p>
+            )}
+
+            {/* Feedback entries */}
+            {feedbackList.map((fb) => (
+              <div
+                key={fb.id}
+                className={`rounded-xl bg-white border px-5 py-4 space-y-3 ${
+                  fb.promotedToKb ? 'border-green-200 bg-green-50/30' : 'border-gray-200'
+                }`}
+              >
+                {/* Header row */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    {fb.rating === 'good' ? (
+                      <span className="flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                        <ThumbsUp size={11} /> Good
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-600">
+                        <ThumbsDown size={11} /> Bad
+                      </span>
+                    )}
+                    {fb.promotedToKb && (
+                      <span className="flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                        <CheckCircle size={11} /> In KB
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-xs text-gray-400 flex-shrink-0">
+                    {fb.userEmail} · {new Date(fb.createdAt).toLocaleDateString()}
+                  </span>
+                </div>
+
+                {/* Question */}
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Question</p>
+                  <p className="text-sm text-gray-800 leading-relaxed">{fb.question}</p>
+                </div>
+
+                {/* Answer preview */}
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Answer</p>
+                  <p className="text-sm text-gray-700 leading-relaxed line-clamp-4">{fb.answer}</p>
+                </div>
+
+                {/* Sources */}
+                {fb.sources && fb.sources.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {fb.sources.map((s, i) => (
+                      <span key={i} className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
+                        {s.name} ({s.similarity}%)
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Optional comment */}
+                {fb.comment && (
+                  <p className="text-xs text-gray-500 italic border-l-2 border-gray-200 pl-3">
+                    "{fb.comment}"
+                  </p>
+                )}
+
+                {/* Add to KB button */}
+                {!fb.promotedToKb && fb.rating === 'good' && (
+                  <button
+                    onClick={() => handlePromote(fb.id)}
+                    disabled={promotingId === fb.id}
+                    className="rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50 transition"
+                  >
+                    {promotingId === fb.id ? 'Adding to KB...' : 'Add to Knowledge Base'}
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
         )}
       </div>
 
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 rounded-xl bg-gray-900 px-5 py-3 text-sm text-white shadow-lg">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 rounded-xl bg-gray-900 px-5 py-3 text-sm text-white shadow-lg z-50">
           {toast}
         </div>
       )}

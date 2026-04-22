@@ -1,13 +1,15 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { streamChat, type ChatMessage } from '../lib/api'
-import { LogOut, Settings, RotateCcw, Send, Brain } from 'lucide-react'
+import { streamChat, submitFeedback, type ChatMessage } from '../lib/api'
+import { LogOut, Settings, RotateCcw, Send, Brain, ThumbsUp, ThumbsDown } from 'lucide-react'
 
 interface Message extends ChatMessage {
   id: string
   sources?: Array<{ name: string; similarity: number }>
   streaming?: boolean
+  messageId?: string | null      // DB message ID for feedback
+  feedbackState?: 'none' | 'good' | 'bad' | 'submitted'
 }
 
 export default function ChatPage() {
@@ -16,6 +18,7 @@ export default function ChatPage() {
   const [input, setInput] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
   const [userRole, setUserRole] = useState<string>('member')
+  const [conversationId, setConversationId] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -41,7 +44,13 @@ export default function ChatPage() {
 
     const userMessage: Message = { id: crypto.randomUUID(), role: 'user', content: text }
     const assistantId = crypto.randomUUID()
-    const assistantMessage: Message = { id: assistantId, role: 'assistant', content: '', streaming: true }
+    const assistantMessage: Message = {
+      id: assistantId,
+      role: 'assistant',
+      content: '',
+      streaming: true,
+      feedbackState: 'none',
+    }
 
     setMessages((prev) => [...prev, userMessage, assistantMessage])
     setInput('')
@@ -61,10 +70,20 @@ export default function ChatPage() {
           )
         )
       },
-      (sources) => {
+      (result) => {
+        // Save conversationId for subsequent messages
+        if (result.conversationId) setConversationId(result.conversationId)
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === assistantId ? { ...m, streaming: false, sources } : m
+            m.id === assistantId
+              ? {
+                  ...m,
+                  streaming: false,
+                  sources: result.sources,
+                  messageId: result.messageId,
+                  feedbackState: 'none',
+                }
+              : m
           )
         )
         setIsStreaming(false)
@@ -79,8 +98,41 @@ export default function ChatPage() {
           )
         )
         setIsStreaming(false)
-      }
+      },
+      conversationId
     )
+  }
+
+  async function handleFeedback(messageLocalId: string, rating: 'good' | 'bad') {
+    const msg = messages.find((m) => m.id === messageLocalId)
+    if (!msg?.messageId) return
+
+    // Optimistic UI update
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageLocalId ? { ...m, feedbackState: rating } : m
+      )
+    )
+
+    try {
+      await submitFeedback(msg.messageId, rating)
+      // Show "submitted" state after 1.5s
+      setTimeout(() => {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === messageLocalId ? { ...m, feedbackState: 'submitted' } : m
+          )
+        )
+      }, 1500)
+    } catch (err) {
+      console.error('Feedback error:', err)
+      // Revert on failure
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageLocalId ? { ...m, feedbackState: 'none' } : m
+        )
+      )
+    }
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -93,6 +145,11 @@ export default function ChatPage() {
   async function handleSignOut() {
     await supabase.auth.signOut()
     navigate('/login')
+  }
+
+  function handleClear() {
+    setMessages([])
+    setConversationId(null)
   }
 
   return (
@@ -116,7 +173,7 @@ export default function ChatPage() {
             </button>
           )}
           <button
-            onClick={() => setMessages([])}
+            onClick={handleClear}
             className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 transition"
           >
             <RotateCcw size={15} />
@@ -146,10 +203,10 @@ export default function ChatPage() {
               </p>
               <div className="mt-6 grid gap-2 text-left w-full max-w-sm">
                 {[
-                  'What are C&T\'s three core service lines?',
+                  "What are C&T's three core service lines?",
                   'How does C&T approach a digital transformation engagement?',
                   'What is the Enable AI service?',
-                  'What are C&T\'s core values?',
+                  "What are C&T's core values?",
                 ].map((suggestion) => (
                   <button
                     key={suggestion}
@@ -166,7 +223,7 @@ export default function ChatPage() {
           {messages.map((msg) => (
             <div
               key={msg.id}
-              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
             >
               <div
                 className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
@@ -198,6 +255,42 @@ export default function ChatPage() {
                   </div>
                 )}
               </div>
+
+              {/* Feedback buttons — shown on assistant messages after streaming */}
+              {msg.role === 'assistant' && !msg.streaming && msg.messageId && (
+                <div className="mt-1.5 flex items-center gap-1">
+                  {msg.feedbackState === 'submitted' ? (
+                    <span className="text-xs text-gray-400">Thanks for the feedback!</span>
+                  ) : msg.feedbackState === 'good' || msg.feedbackState === 'bad' ? (
+                    <span className="text-xs text-gray-400 flex items-center gap-1">
+                      {msg.feedbackState === 'good' ? (
+                        <ThumbsUp size={12} className="text-green-500" />
+                      ) : (
+                        <ThumbsDown size={12} className="text-red-400" />
+                      )}
+                      Got it
+                    </span>
+                  ) : (
+                    <>
+                      <span className="text-xs text-gray-400 mr-1">Helpful?</span>
+                      <button
+                        onClick={() => handleFeedback(msg.id, 'good')}
+                        className="flex items-center gap-1 rounded px-2 py-1 text-xs text-gray-400 hover:text-green-600 hover:bg-green-50 transition"
+                        title="Helpful"
+                      >
+                        <ThumbsUp size={13} />
+                      </button>
+                      <button
+                        onClick={() => handleFeedback(msg.id, 'bad')}
+                        className="flex items-center gap-1 rounded px-2 py-1 text-xs text-gray-400 hover:text-red-500 hover:bg-red-50 transition"
+                        title="Not helpful"
+                      >
+                        <ThumbsDown size={13} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           ))}
 
@@ -214,7 +307,7 @@ export default function ChatPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask anything about C&T…"
+              placeholder="Ask anything about C&T..."
               rows={1}
               className="flex-1 resize-none bg-transparent text-sm text-gray-800 placeholder-gray-400 outline-none leading-relaxed max-h-32"
               style={{ minHeight: '24px' }}

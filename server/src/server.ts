@@ -3,6 +3,7 @@ import express from 'express'
 import cors from 'cors'
 import chatRouter from './routes/chat'
 import knowledgeRouter from './routes/knowledge'
+import feedbackRouter from './routes/feedback'
 
 const app = express()
 const PORT = process.env.PORT ?? 3001
@@ -14,6 +15,7 @@ app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'C&T Brain A
 
 app.use('/api/chat', chatRouter)
 app.use('/api/knowledge', knowledgeRouter)
+app.use('/api/feedback', feedbackRouter)
 
 app.listen(PORT, () => {
   console.log(`C&T Brain server running on http://localhost:${PORT}`)
