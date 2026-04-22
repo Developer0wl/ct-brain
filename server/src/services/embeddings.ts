@@ -1,9 +1,9 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
-const embeddingModel = genAI.getGenerativeModel({ model: 'text-embedding-004' })
+const embeddingModel = genAI.getGenerativeModel({ model: 'gemini-embedding-001' })
 
-// Gemini text-embedding-004 produces 768-dimensional vectors
+// Gemini gemini-embedding-001 produces 3072-dimensional vectors
 export async function embedText(text: string): Promise<number[]> {
   const result = await embeddingModel.embedContent({
     content: { role: 'user', parts: [{ text: text.slice(0, 8000) }] },

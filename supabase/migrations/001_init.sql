@@ -8,7 +8,7 @@ CREATE TABLE knowledge_chunks (
   source_type TEXT NOT NULL,         -- 'pdf' | 'docx' | 'txt' | 'faq'
   title TEXT,                        -- optional human label
   content TEXT NOT NULL,             -- raw text of this chunk
-  embedding vector(768),            -- Gemini text-embedding-004 dimension
+  embedding vector(3072),            -- Gemini gemini-embedding-001 dimension
   metadata JSONB DEFAULT '{}',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -91,7 +91,7 @@ CREATE POLICY "Admins can read all profiles"
 
 -- Similarity search function (used by backend RAG)
 CREATE OR REPLACE FUNCTION match_knowledge_chunks(
-  query_embedding vector(768),
+  query_embedding vector(3072),
   match_threshold FLOAT DEFAULT 0.5,
   match_count INT DEFAULT 5
 )

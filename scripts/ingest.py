@@ -33,7 +33,7 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 CHUNK_SIZE = 500   # words per chunk
 OVERLAP = 50       # words of overlap between chunks
-EMBED_MODEL = 'models/text-embedding-004'  # 768 dimensions
+EMBED_MODEL = 'models/gemini-embedding-001'  # 3072 dimensions
 SUPPORTED_EXTENSIONS = {'.pdf', '.docx', '.txt'}
 
 
@@ -126,7 +126,7 @@ def ingest_file(path: Path, dry_run: bool = False) -> None:
         print(f'  (dry run — not saving to Supabase)')
         return
 
-    print(f'  → Embedding {len(chunks)} chunks via Gemini text-embedding-004…')
+    print(f'  → Embedding {len(chunks)} chunks via Gemini gemini-embedding-001…')
     embeddings = embed_batch(chunks)
 
     source_id = str(uuid.uuid4())

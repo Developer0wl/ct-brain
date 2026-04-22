@@ -3,9 +3,9 @@ import { CT_BRAIN_SYSTEM_PROMPT } from '../config/systemPrompt'
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
-// Use gemini-1.5-flash for fast, cost-effective responses
+// Use gemini-2.5-flash for fast, cost-effective responses
 const chatModel = genAI.getGenerativeModel({
-  model: 'gemini-1.5-flash',
+  model: 'gemini-2.5-flash',
   systemInstruction: CT_BRAIN_SYSTEM_PROMPT,
 })
 
