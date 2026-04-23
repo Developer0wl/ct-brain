@@ -4,31 +4,173 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Brand */
     --primary: 221 83% 53%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Surface */
+    --background: 220 20% 97%;
+    --surface: 0 0% 100%;
+    --foreground: 222 47% 11%;
+
+    /* Sidebar */
+    --sidebar-bg: 222 47% 11%;
+    --sidebar-fg: 215 20% 65%;
+    --sidebar-fg-active: 0 0% 100%;
+    --sidebar-hover: 220 30% 18%;
+    --sidebar-active: 221 83% 53%;
+
+    /* Subtle */
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
     --ring: 221 83% 53%;
-    --radius: 0.5rem;
+
+    /* Status */
+    --success: 142 71% 45%;
+    --warning: 38 92% 50%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Radius */
+    --radius: 0.625rem;
   }
 
   * {
     border-color: hsl(var(--border));
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   body {
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
-    font-feature-settings: "rlig" 1, "calt" 1;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
   }
 }
+
+/* Markdown prose styles for chat responses */
+@layer components {
+  .prose-chat {
+    font-size: 0.9rem;
+    line-height: 1.7;
+    color: hsl(var(--foreground));
+  }
+
+  .prose-chat p {
+    margin: 0 0 0.75rem 0;
+  }
+
+  .prose-chat p:last-child {
+    margin-bottom: 0;
+  }
+
+  .prose-chat strong {
+    font-weight: 600;
+    color: hsl(222 47% 8%);
+  }
+
+  .prose-chat em {
+    font-style: italic;
+  }
+
+  .prose-chat h1,
+  .prose-chat h2,
+  .prose-chat h3 {
+    font-weight: 600;
+    margin: 1rem 0 0.4rem 0;
+    line-height: 1.4;
+    color: hsl(222 47% 8%);
+  }
+
+  .prose-chat h1 { font-size: 1.1rem; }
+  .prose-chat h2 { font-size: 1rem; }
+  .prose-chat h3 { font-size: 0.95rem; }
+
+  .prose-chat ul,
+  .prose-chat ol {
+    margin: 0.5rem 0 0.75rem 0;
+    padding-left: 1.4rem;
+  }
+
+  .prose-chat ul { list-style-type: disc; }
+  .prose-chat ol { list-style-type: decimal; }
+
+  .prose-chat li {
+    margin-bottom: 0.35rem;
+    padding-left: 0.25rem;
+  }
+
+  .prose-chat li:last-child {
+    margin-bottom: 0;
+  }
+
+  .prose-chat li > ul,
+  .prose-chat li > ol {
+    margin: 0.25rem 0 0.25rem 0;
+  }
+
+  .prose-chat code {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.82rem;
+    background: hsl(220 14% 94%);
+    border: 1px solid hsl(220 13% 88%);
+    border-radius: 4px;
+    padding: 0.1rem 0.35rem;
+    color: hsl(222 47% 15%);
+  }
+
+  .prose-chat pre {
+    background: hsl(222 47% 10%);
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 0.75rem 0;
+    overflow-x: auto;
+  }
+
+  .prose-chat pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: hsl(215 20% 85%);
+    font-size: 0.82rem;
+  }
+
+  .prose-chat blockquote {
+    border-left: 3px solid hsl(var(--primary));
+    padding-left: 0.875rem;
+    margin: 0.75rem 0;
+    color: hsl(var(--muted-foreground));
+    font-style: italic;
+  }
+
+  .prose-chat hr {
+    border: none;
+    border-top: 1px solid hsl(var(--border));
+    margin: 1rem 0;
+  }
+
+  .prose-chat a {
+    color: hsl(var(--primary));
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+}
+
+/* Sidebar scrollbar */
+.sidebar-scroll::-webkit-scrollbar { width: 4px; }
+.sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+.sidebar-scroll::-webkit-scrollbar-thumb { background: hsl(var(--sidebar-hover)); border-radius: 4px; }
+
+/* Chat scroll */
+.chat-scroll::-webkit-scrollbar { width: 6px; }
+.chat-scroll::-webkit-scrollbar-track { background: transparent; }
+.chat-scroll::-webkit-scrollbar-thumb { background: hsl(220 13% 86%); border-radius: 6px; }
+.chat-scroll::-webkit-scrollbar-thumb:hover { background: hsl(220 13% 76%); }
