@@ -1,8 +1,7 @@
 import { Router, Response } from 'express'
 import { createClient } from '@supabase/supabase-js'
 import { requireAuth, AuthedRequest } from '../middleware/auth'
-import { retrieveRelevantChunks, buildContextBlock } from '../services/rag'
-import { streamChatResponse } from '../services/gemini'
+import { runAgentWithStreaming } from '../services/gemini'
 
 const router = Router()
 
@@ -29,11 +28,7 @@ router.post('/', requireAuth, async (req: AuthedRequest, res: Response): Promise
   }
 
   try {
-    // Retrieve relevant knowledge
-    const chunks = await retrieveRelevantChunks(lastUserMessage.content)
-    const contextBlock = buildContextBlock(chunks)
-
-    // Resolve conversation: reuse existing or create new one
+    // Resolve or create conversation
     let conversationId = existingConversationId ?? null
     if (!conversationId) {
       const { data: conv, error: convError } = await supabase
@@ -42,80 +37,68 @@ router.post('/', requireAuth, async (req: AuthedRequest, res: Response): Promise
         .select('id')
         .single()
 
-      if (convError) {
-        console.error('Failed to create conversation:', convError)
-      } else {
-        conversationId = conv.id
-      }
+      if (!convError) conversationId = conv.id
     }
 
-    // Persist the user message
+    // Persist user message
     let userMessageId: string | null = null
     if (conversationId) {
-      const { data: userMsg, error: userMsgError } = await supabase
+      const { data: userMsg } = await supabase
         .from('messages')
-        .insert({
-          conversation_id: conversationId,
-          role: 'user',
-          content: lastUserMessage.content,
-          sources: [],
-        })
+        .insert({ conversation_id: conversationId, role: 'user', content: lastUserMessage.content, sources: [] })
         .select('id')
         .single()
-
-      if (userMsgError) {
-        console.error('Failed to persist user message:', userMsgError)
-      } else {
-        userMessageId = userMsg.id
-      }
+      if (userMsg) userMessageId = userMsg.id
     }
 
-    // Stream response back using SSE
+    // Open SSE stream
     res.setHeader('Content-Type', 'text/event-stream')
     res.setHeader('Cache-Control', 'no-cache')
     res.setHeader('Connection', 'keep-alive')
     res.flushHeaders()
 
     let fullResponse = ''
+    const toolsUsed: string[] = []
 
-    await streamChatResponse(
+    await runAgentWithStreaming(
       messages,
-      contextBlock,
+      // onActivity — tool is running, tell the frontend
+      (label) => {
+        res.write(`data: ${JSON.stringify({ type: 'activity', label })}\n\n`)
+      },
+      // onChunk — stream response text
       (text) => {
         fullResponse += text
         res.write(`data: ${JSON.stringify({ type: 'chunk', text })}\n\n`)
       },
-      async () => {
-        const sourceSummary = chunks.map((c) => ({
-          name: c.title ?? c.source_name,
-          similarity: Math.round(c.similarity * 100),
-        }))
+      // onDone — persist assistant message + send final metadata
+      async (usedTools) => {
+        toolsUsed.push(...usedTools)
 
-        // Persist the assistant message after stream completes
+        // Persist assistant message
         let assistantMessageId: string | null = null
         if (conversationId && fullResponse) {
-          const { data: asstMsg, error: asstMsgError } = await supabase
+          const { data: asstMsg } = await supabase
             .from('messages')
             .insert({
               conversation_id: conversationId,
               role: 'assistant',
               content: fullResponse,
-              sources: sourceSummary,
+              sources: toolsUsed.map((t) => ({ name: t, similarity: 100 })),
             })
             .select('id')
             .single()
-
-          if (asstMsgError) {
-            console.error('Failed to persist assistant message:', asstMsgError)
-          } else {
-            assistantMessageId = asstMsg.id
-          }
+          if (asstMsg) assistantMessageId = asstMsg.id
         }
 
         res.write(
           `data: ${JSON.stringify({
             type: 'done',
-            sources: sourceSummary,
+            sources: toolsUsed.map((t) => ({
+              name: toolLabel(t),
+              similarity: 100,
+            })),
+            toolsUsed,
             conversationId,
             messageId: assistantMessageId,
           })}\n\n`
@@ -133,5 +116,16 @@ router.post('/', requireAuth, async (req: AuthedRequest, res: Response): Promise
     }
   }
 })
+
+function toolLabel(toolName: string): string {
+  const labels: Record<string, string> = {
+    search_knowledge_base: 'C&T Knowledge Base',
+    search_web: 'Web Search',
+    search_teams_messages: 'Microsoft Teams',
+    search_emails: 'Outlook Email',
+    search_sharepoint: 'SharePoint',
+  }
+  return labels[toolName] ?? toolName
+}
 
 export default router

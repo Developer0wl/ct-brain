@@ -17,8 +17,8 @@ export interface RetrievedChunk {
 
 export async function retrieveRelevantChunks(
   query: string,
-  matchCount = 5,
-  threshold = 0.4
+  threshold = 0.35,
+  matchCount = 5
 ): Promise<RetrievedChunk[]> {
   const embedding = await embedText(query)
 

@@ -15,9 +15,11 @@ export interface ChatMessage {
 }
 
 export interface StreamChunk {
-  type: 'chunk' | 'done' | 'error'
+  type: 'chunk' | 'done' | 'error' | 'activity'
   text?: string
+  label?: string   // for 'activity' events — e.g. "Searching the web..."
   sources?: Array<{ name: string; similarity: number }>
+  toolsUsed?: string[]
   message?: string
   conversationId?: string
   messageId?: string
@@ -34,7 +36,8 @@ export async function streamChat(
   onChunk: (text: string) => void,
   onDone: (result: StreamDoneResult) => void,
   onError: (msg: string) => void,
-  conversationId?: string | null
+  conversationId?: string | null,
+  onActivity?: (label: string) => void
 ): Promise<void> {
   const authHeader = await getAuthHeader()
 
@@ -71,6 +74,7 @@ export async function streamChat(
       if (!line.startsWith('data: ')) continue
       try {
         const parsed: StreamChunk = JSON.parse(line.slice(6))
+        if (parsed.type === 'activity' && parsed.label) onActivity?.(parsed.label)
         if (parsed.type === 'chunk' && parsed.text) onChunk(parsed.text)
         if (parsed.type === 'done') {
           onDone({

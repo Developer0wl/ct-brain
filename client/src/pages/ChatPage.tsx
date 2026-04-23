@@ -12,12 +12,18 @@ import {
   ThumbsDown,
   Sparkles,
   ChevronRight,
+  Globe,
+  Database,
+  Mail,
+  MessageSquare,
+  FolderOpen,
 } from 'lucide-react'
 
 interface Message extends ChatMessage {
   id: string
   sources?: Array<{ name: string; similarity: number }>
   streaming?: boolean
+  activity?: string | null   // current tool activity label
   messageId?: string | null
   feedbackState?: 'none' | 'good' | 'bad' | 'submitted'
 }
@@ -41,6 +47,15 @@ function TypingIndicator() {
       ))}
     </div>
   )
+}
+
+function SourceIcon({ name }: { name: string }) {
+  const n = name.toLowerCase()
+  if (n.includes('web')) return <Globe size={10} className="flex-shrink-0" />
+  if (n.includes('teams')) return <MessageSquare size={10} className="flex-shrink-0" />
+  if (n.includes('email') || n.includes('outlook')) return <Mail size={10} className="flex-shrink-0" />
+  if (n.includes('sharepoint') || n.includes('onedrive')) return <FolderOpen size={10} className="flex-shrink-0" />
+  return <Database size={10} className="flex-shrink-0" />
 }
 
 function Avatar({ initials, color }: { initials: string; color: string }) {
@@ -125,7 +140,10 @@ export default function ChatPage() {
       history,
       (chunk) => {
         setMessages((prev) =>
-          prev.map((m) => m.id === assistantId ? { ...m, content: m.content + chunk } : m)
+          prev.map((m) => m.id === assistantId
+            ? { ...m, content: m.content + chunk, activity: null }
+            : m
+          )
         )
       },
       (result) => {
@@ -133,7 +151,7 @@ export default function ChatPage() {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
-              ? { ...m, streaming: false, sources: result.sources, messageId: result.messageId, feedbackState: 'none' }
+              ? { ...m, streaming: false, activity: null, sources: result.sources, messageId: result.messageId, feedbackState: 'none' }
               : m
           )
         )
@@ -144,13 +162,19 @@ export default function ChatPage() {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
-              ? { ...m, content: `Something went wrong: ${err}`, streaming: false }
+              ? { ...m, content: `Something went wrong: ${err}`, streaming: false, activity: null }
               : m
           )
         )
         setIsStreaming(false)
       },
-      conversationId
+      conversationId,
+      // onActivity — show which tool is running
+      (label) => {
+        setMessages((prev) =>
+          prev.map((m) => m.id === assistantId ? { ...m, activity: label } : m)
+        )
+      }
     )
   }
 
@@ -341,7 +365,14 @@ export default function ChatPage() {
                     {msg.role === 'user' ? (
                       <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
                     ) : msg.streaming && !msg.content ? (
-                      <TypingIndicator />
+                      msg.activity ? (
+                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse flex-shrink-0" />
+                          {msg.activity}
+                        </span>
+                      ) : (
+                        <TypingIndicator />
+                      )
                     ) : (
                       <div className="prose-chat">
                         <ReactMarkdown>{msg.content}</ReactMarkdown>
@@ -349,17 +380,16 @@ export default function ChatPage() {
                     )}
                   </div>
 
-                  {/* Sources */}
+                  {/* Sources / tools used */}
                   {msg.sources && msg.sources.length > 0 && !msg.streaming && (
                     <div className="mt-2 flex flex-wrap gap-1.5 max-w-[88%]">
                       {msg.sources.map((s, i) => (
                         <span
                           key={i}
-                          className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs text-muted-foreground"
+                          className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs text-muted-foreground"
                         >
-                          <span className="h-1.5 w-1.5 rounded-full bg-primary/50 flex-shrink-0" />
+                          <SourceIcon name={s.name} />
                           {s.name}
-                          <span className="text-muted-foreground/60">{s.similarity}%</span>
                         </span>
                       ))}
                     </div>
